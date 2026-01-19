@@ -1,0 +1,38 @@
+name: Secure Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_type:
+        default: t2.medium
+      instance_disk:
+        default: "30"
+      db_class:
+        default: db.t3.micro
+      db_storage:
+        default: "50"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: |
+          terraform apply -auto-approve             -var="instance_type=${{ inputs.instance_type }}"             -var="instance_disk_size=${{ inputs.instance_disk }}"             -var="db_instance_class=${{ inputs.db_class }}"             -var="db_storage=${{ inputs.db_storage }}"             -var="db_username=${{ secrets.DB_USERNAME }}"             -var="db_password=${{ secrets.DB_PASSWORD }}"
