@@ -103,8 +103,9 @@ resource "aws_instance" "ec2" {
 
               apt update -y
               apt upgrade -y
-              apt install ca-certificates curl gnupg lsb-release postgresql-client -y
+              apt install -y ca-certificates curl gnupg lsb-release postgresql-client
 
+              # Install Docker
               install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
               chmod a+r /etc/apt/keyrings/docker.gpg
@@ -113,17 +114,47 @@ resource "aws_instance" "ec2" {
               $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
 
               apt update -y
-              apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+              apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
               systemctl enable docker
               systemctl start docker
 
+              # Esperar a que Docker esté listo
+              until docker info >/dev/null 2>&1; do sleep 3; done
+
               usermod -aG docker ubuntu
+
+              # --- DefectDojo ---
+              cd /opt
               git clone https://github.com/DefectDojo/django-DefectDojo.git
               cd django-DefectDojo
               docker compose up -d
-              docker run -d --name sonarqube -p 9000:9000 -p 9092:9092 -v sonarqube-conf:/opt/sonarqube/conf -v sonarqube-data:/opt/sonarqube/data -v sonarqube-logs:/opt/sonarqube/logs -v sonarqube-extensions:/opt/sonarqube/extensions sonarqube
+
+              # --- Settings Sonarqube---
+
+              sysctl vm.max_map_count
+              sysctl -w vm.max_map_count=262144
+              echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+              sysctl -p
+
+              # --- SonarQube ---
+              mkdir -p /opt/sonarqube
+
+              > /opt/sonarqube/sonarqube.env
+
+              chmod 600 /opt/sonarqube/sonarqube.env
+
+              docker run -d --name sonarqube \
+                --restart unless-stopped \
+                --env-file /opt/sonarqube/sonarqube.env \
+                -p 9000:9000 \
+                -v sonarqube-conf:/opt/sonarqube/conf \
+                -v sonarqube-data:/opt/sonarqube/data \
+                -v sonarqube-logs:/opt/sonarqube/logs \
+                -v sonarqube-extensions:/opt/sonarqube/extensions \
+                sonarqube:community
               EOF
+
 }
 
 resource "aws_db_subnet_group" "subnet_group" {
